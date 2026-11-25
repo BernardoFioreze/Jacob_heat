@@ -68,12 +68,22 @@ sbatch sequencial.sbatch 1024 1e-6 1
 Os argumentos são `N`, `tol` e o número de repetições. O padrão é `1024 1e-6 1`.
 
 O script:
-- pede um nó exclusivo, com limite de 3 h;
+- pede um nó exclusivo, com limite de 8 h;
 - compila no próprio nó de cálculo, porque `-march=native` gera código para a CPU onde compila, e põe o binário numa pasta temporária do job;
 - roda o solver preso a um núcleo;
 - grava tudo em `saidas/heat-seq-<jobid>.out`.
 
-Como cada job tem o seu binário, para várias repetições é melhor submeter vários jobs: eles rodam ao mesmo tempo em nós diferentes.
+Limites do Atlântica: **no máximo 2 jobs na fila por usuário**, e o tempo máximo do job depende de quantos nós ele pede:
+
+| Nós | Tempo máximo |
+|---|---|
+| 1 | 16 h |
+| 2 | 8 h |
+| 4 | 4 h |
+| 8 | 2 h |
+| 16 | 1 h |
+
+Por causa do limite de 2 jobs na fila, as repetições devem ficar dentro do mesmo job (3º argumento), e não espalhadas em vários jobs.
 
 Cada repetição termina com uma linha `RESULTADO ...` (iterações, soma de T, tempos e fração fora do laço), fácil de filtrar:
 
@@ -81,7 +91,7 @@ Cada repetição termina com uma linha `RESULTADO ...` (iterações, soma de T, 
 grep RESULTADO saidas/*.out
 ```
 
-**Por que `N = 1024` e `tol = 1e-6`:** com 64 processos, cada um fica com 16 linhas. Assim o cálculo de cada iteração pesa mais que a comunicação (`MPI_Allreduce` e troca de bordas), e o speed-up fica mais perto do ideal do que com `N = 512`. Com essa tolerância, a temperatura média para a cerca de 0,45 °C da solução exata. Estimativa: cerca de 2,4 milhões de iterações e cerca de 80 min por repetição num i7-1355U.
+**Por que `N = 1024` e `tol = 1e-6`:** com 64 processos, cada um fica com 16 linhas. Assim o cálculo de cada iteração pesa mais que a comunicação (`MPI_Allreduce` e troca de bordas), e o speed-up fica mais perto do ideal do que com `N = 512`. Com essa tolerância, a temperatura média para a cerca de 0,45 °C da solução exata. Estimativa: cerca de 2,4 milhões de iterações e cerca de 80 min por repetição num i7-1355U. No Atlântica (Xeon E5520, de 2009) é bem mais lento: a primeira tentativa, com limite de 3 h, foi cancelada antes de terminar.
 
 Referência medida com `N = 512` e `tol = 1e-6`: 760 604 iterações, soma de T = 41874765.40..., cerca de 5,5 min por repetição no mesmo i7-1355U.
 

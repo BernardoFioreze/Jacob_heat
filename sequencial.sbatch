@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --exclusive
-#SBATCH --time=03:00:00
+#SBATCH --time=08:00:00
 #SBATCH --output=saidas/%x-%j.out
 ##SBATCH --partition=NOME_DA_PARTICAO   # descomente e ajuste se o Atlântica exigir uma partição
 
@@ -11,9 +11,10 @@
 #
 # Uso (a partir da raiz do repositório):
 #   sbatch sequencial.sbatch [N] [tol] [repetições]
-# Padrão: N=1024, tol=1e-6, 1 repetição (cerca de 80 min num i7-1355U).
-# Para mais repetições, prefira submeter vários jobs: cada um compila o seu
-# próprio binário, então podem rodar ao mesmo tempo em nós diferentes.
+# Padrão: N=1024, tol=1e-6, 1 repetição (cerca de 80 min num i7-1355U, mas
+# mais de 3 h no Xeon E5520 do Atlântica: o job 47341 foi cancelado nas 3 h).
+# Limite de 8 h; o cluster permite até 16 h para jobs de 1 nó, mas só 2 jobs
+# na fila por usuário.
 #
 # A saída vai para saidas/heat-seq-<jobid>.out.
 
