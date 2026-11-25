@@ -1,7 +1,8 @@
 CXX      ?= g++
 CXXFLAGS ?= -O3 -march=native -std=c++17 -Wall -Wextra
+BIN      ?= heat
 
-heat: main.cpp vtkWriter.cpp solverParameters.h vtkWriter.h
+$(BIN): main.cpp vtkWriter.cpp solverParameters.h vtkWriter.h
 	$(CXX) $(CXXFLAGS) -o $@ main.cpp vtkWriter.cpp
 
 clean:
