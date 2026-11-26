@@ -13,17 +13,21 @@
 // Cada célula é calculada com os mesmos valores e na mesma ordem de operações da versão
 // sequencial, então o campo final é idêntico bit a bit, e o número de iterações também.
 //
-// Uso: mpirun -np P ./heat_mpi [N] [tol] [maxIter] [--vtk] [--print]
+// Uso: mpirun -np P ./heat_mpi [N] [tol] [maxIter] [--vtk] [--print] [--por-processo]
 //   (mesmos argumentos da versão sequencial; precisa de N >= P)
+//   --por-processo : imprime o tempo de cada fase em cada processo, com o nó, o núcleo
+//                    e o soquete onde ele rodou
 
 // Só a interface em C do MPI; a de C++ (obsoleta) gera avisos de compilação no Open MPI.
 #define OMPI_SKIP_MPICXX 1
 #define MPICH_SKIP_MPICXX 1
 #include <mpi.h>
+#include <sched.h>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <utility>
 #include <vector>
 #include "solverParameters.h"
@@ -35,13 +39,14 @@ struct Settings {
     long   maxIter = default_maxIter;
     bool   vtk     = false;
     bool   print   = false;
+    bool   perRank = false;  // --por-processo
 };
 
 // Tempo acumulado em cada fase, em um processo.
 struct PhaseTimes {
     double calc  = 0.0;  // fase 1: condições de contorno + varredura
     double verif = 0.0;  // fase 2: MPI_Allreduce do critério de parada
-    double troca = 0.0;  // fase 3: MPI_Sendrecv das linhas de borda
+    double troca = 0.0;  // fase 3: MPI_Isend/MPI_Irecv das linhas de borda
 };
 
 // Material de uma célula pela posição global (i, j), contando as células fantasma.
@@ -129,6 +134,8 @@ public:
     }
 
     double residual() const { return avgChange; }
+    int firstRow() const { return first; }
+    int rowCount() const { return L; }
 
     // Junta o campo inteiro no processo 0 (linhas 1..N, com as colunas fantasma).
     // Nos outros processos, field fica vazio.
@@ -283,6 +290,56 @@ static void writeVTK(const std::vector<double>& field, int N) {
     exportToVTK(kField.data(), N, W, dx, dy, "K_conductivity.vtk");
 }
 
+// Lê um número inteiro de um arquivo (usado para a topologia da CPU em /sys); -1 se falhar.
+static int readIntFile(const std::string& path) {
+    int v = -1;
+    if (FILE* f = std::fopen(path.c_str(), "r")) {
+        if (std::fscanf(f, "%d", &v) != 1) v = -1;
+        std::fclose(f);
+    }
+    return v;
+}
+
+// O que cada processo manda ao processo 0 com --por-processo.
+struct RankInfo {
+    double calc, verif, troca;
+    int first, rows;
+    int cpu, socket, core;
+    char host[64];
+};
+
+// Junta no processo 0 os tempos e o local de cada processo e imprime uma tabela.
+static void printPerRank(const PhaseTimes& pt, int first, int rows, int rank, int size) {
+    RankInfo me{};
+    me.calc = pt.calc; me.verif = pt.verif; me.troca = pt.troca;
+    me.first = first; me.rows = rows;
+    me.cpu = sched_getcpu();
+    std::string topo = "/sys/devices/system/cpu/cpu" + std::to_string(me.cpu) + "/topology/";
+    me.socket = readIntFile(topo + "physical_package_id");
+    me.core   = readIntFile(topo + "core_id");
+    char name[MPI_MAX_PROCESSOR_NAME] = {0};
+    int len = 0;
+    MPI_Get_processor_name(name, &len);
+    std::snprintf(me.host, sizeof(me.host), "%s", name);
+
+    std::vector<RankInfo> all(rank == 0 ? size : 0);
+    MPI_Gather(&me, sizeof(RankInfo), MPI_BYTE,
+               rank == 0 ? all.data() : nullptr, sizeof(RankInfo), MPI_BYTE, 0, MPI_COMM_WORLD);
+    if (rank != 0) return;
+
+    std::printf("Por processo (tempos em s):\n");
+    // Larguras do cabeçalho com 1 a 2 posições a mais nas palavras acentuadas (UTF-8).
+    std::printf("PROC %4s %-13s %4s %7s %7s %11s %11s %13s %10s\n",
+                "proc", "nó", "cpu", "soquete", "núcleo", "linhas", "cálculo", "verificação", "troca");
+    for (int r = 0; r < size; ++r) {
+        const RankInfo& x = all[r];
+        char rowsTxt[32];
+        std::snprintf(rowsTxt, sizeof(rowsTxt), "%d-%d", x.first, x.first + x.rows - 1);
+        std::printf("PROC %4d %-12s %4d %7d %6d %11s %10.4f %11.4f %10.4f\n",
+                    r, x.host, x.cpu, x.socket, x.core, rowsTxt, x.calc, x.verif, x.troca);
+    }
+}
+
 // Encerra todos os processos com uma mensagem (impressa só pelo processo 0).
 static void fail(int rank, const char* msg, const char* arg = "") {
     if (rank == 0) std::fprintf(stderr, msg, arg);
@@ -296,13 +353,14 @@ static Settings parseArgs(int argc, char** argv, int rank, int size) {
     for (int a = 1; a < argc; ++a) {
         if      (std::strcmp(argv[a], "--vtk") == 0)   s.vtk = true;
         else if (std::strcmp(argv[a], "--print") == 0) s.print = true;
+        else if (std::strcmp(argv[a], "--por-processo") == 0) s.perRank = true;
         else if (positional == 0) { s.N = std::atoi(argv[a]);        ++positional; }
         else if (positional == 1) { s.tol = std::atof(argv[a]);      ++positional; }
         else if (positional == 2) { s.maxIter = std::atol(argv[a]);  ++positional; }
         else fail(rank, "Argumento desconhecido: %s\n", argv[a]);
     }
     if (s.N < 2 || s.tol <= 0.0 || s.maxIter < 1)
-        fail(rank, "Uso: %s [N>=2] [tol>0] [maxIter>=1] [--vtk] [--print]\n", argv[0]);
+        fail(rank, "Uso: %s [N>=2] [tol>0] [maxIter>=1] [--vtk] [--print] [--por-processo]\n", argv[0]);
     if (s.N < size)
         fail(rank, "N precisa ser pelo menos o número de processos (cada um fica com uma linha ou mais).\n");
     return s;
@@ -370,6 +428,8 @@ int main(int argc, char** argv) {
         std::printf("Espera verif.   (s) : %.6f\n", tavg[1] - tmin[1]);
         std::printf("Espera troca    (s) : %.6f\n", tavg[2] - tmin[2]);
     }
+
+    if (settings.perRank) printPerRank(pt, solver.firstRow(), solver.rowCount(), rank, size);
 
     MPI_Finalize();
     return 0;

@@ -60,10 +60,10 @@ make heat_mpi
 ```
 
 ```bash
-mpirun -np 4 ./heat_mpi [N] [tol] [maxIter] [--vtk] [--print]
+mpirun -np 4 ./heat_mpi [N] [tol] [maxIter] [--vtk] [--print] [--por-processo]
 ```
 
-Os argumentos são os mesmos da versão sequencial, com `N` maior ou igual ao número de processos.
+Os argumentos são os mesmos da versão sequencial, com `N` maior ou igual ao número de processos. Com `--por-processo`, o processo 0 também imprime uma linha `PROC` por processo, com o nó, a CPU, o soquete, o núcleo, as linhas do bloco e o tempo de cada fase. Serve para ver quem é o processo mais lento.
 
 **Divisão dos dados:** cada processo fica com um bloco de linhas consecutivas da grade (N/P linhas; quando a divisão não é exata, os primeiros processos ficam com uma a mais), mais uma linha fantasma em cima e outra embaixo. O primeiro processo guarda a borda superior (Dirichlet) e o último, a inferior.
 
@@ -202,6 +202,20 @@ Resultado do primeiro teste (P = 32, troca com dois `MPI_Sendrecv` em sequência
 Cada placa chega a 1 Gb/s, mas uma linha de 8 KB leva de 140 a 200 µs entre nós (66 µs de transmissão e o resto de latência do TCP), 30 vezes mais que dentro de um nó. Com todas as placas, o Open MPI divide cada mensagem entre elas, e as placas lentas em algum par de nós atrasam todo mundo. Por isso o `paralelo.sbatch` usa `BTL_IF=eno1` por padrão; `BTL_IF= sbatch ...` (vazio) volta a usar todas.
 
 Depois desse teste, a troca passou a usar `MPI_Isend`/`MPI_Irecv` nas duas direções ao mesmo tempo, com um só `MPI_Waitall`, para as mensagens para cima e para baixo viajarem juntas.
+
+### Prévia da escalabilidade
+
+Antes dos jobs longos, o `escala.sbatch` roda, num único job de 4 nós, 20 000 iterações com P = 2, 4, 8, 16, 32 e 64, cada um com os nós do enunciado e com `--por-processo`. No fim, mostra para cada P o tempo por iteração e a estimativa de uma repetição completa, do speed-up e da eficiência em relação ao T1:
+
+```bash
+sbatch escala.sbatch
+```
+
+```
+ESCALA P=32 us_por_iteracao=... repeticao_min=... speedup=... eficiencia=...
+```
+
+Com essas estimativas, dá para conferir se a divisão das repetições em jobs cabe nos limites do cluster.
 
 Variáveis opcionais: `MPI_SRC` (fontes, padrão `heat_mpi.cpp vtkWriter.cpp`), `MPICXX`, `LAUNCHER` e `BTL_IF`. Se o MPI do Atlântica não funcionar com `srun`, use `LAUNCHER=mpirun`:
 
