@@ -11,8 +11,8 @@
 #
 # Uso (a partir da raiz do repositório):
 #   sbatch sequencial.sbatch [N] [tol] [repetições]
-# Padrão: N=1024, tol=1e-6, 1 repetição (cerca de 80 min num i7-1355U, mas
-# mais de 3 h no Xeon E5520 do Atlântica: o job 47341 foi cancelado nas 3 h).
+# Padrão: N=1024, tol=1e-6, 1 repetição (4 h 35 min no Xeon E5520 do Atlântica,
+# job 47421).
 # Limite de 8 h; o cluster permite até 16 h para jobs de 1 nó, mas só 2 jobs
 # na fila por usuário.
 #

@@ -91,7 +91,13 @@ Cada repetição termina com uma linha `RESULTADO ...` (iterações, soma de T, 
 grep RESULTADO saidas/*.out
 ```
 
-**Por que `N = 1024` e `tol = 1e-6`:** com 64 processos, cada um fica com 16 linhas. Assim o cálculo de cada iteração pesa mais que a comunicação (`MPI_Allreduce` e troca de bordas), e o speed-up fica mais perto do ideal do que com `N = 512`. Com essa tolerância, a temperatura média para a cerca de 0,45 °C da solução exata. Estimativa: cerca de 2,4 milhões de iterações e cerca de 80 min por repetição num i7-1355U. No Atlântica (Xeon E5520, de 2009) é bem mais lento: a primeira tentativa, com limite de 3 h, foi cancelada antes de terminar.
+**Por que `N = 1024` e `tol = 1e-6`:** com 64 processos, cada um fica com 16 linhas. Assim o cálculo de cada iteração pesa mais que a comunicação (`MPI_Allreduce` e troca de bordas), e o speed-up fica mais perto do ideal do que com `N = 512`. Com essa tolerância, a temperatura média para a cerca de 0,45 °C da solução exata. **Referência do T1 no Atlântica** (job 47421, Xeon E5520, saída em [`saidas/heat-seq-47421.out`](saidas/heat-seq-47421.out)):
+
+| Iterações | Soma de T | Tempo do laço | Fração fora do laço |
+|---|---|---|---|
+| 2 449 575 | 167156330.0959675014 | 16 515 s (4 h 35 min) | 0,000007 |
+
+A versão paralela tem de dar exatamente o mesmo número de iterações. A soma de T pode diferir nos últimos dígitos, porque a redução soma em outra ordem. O T1 foi medido uma vez só, por causa do tempo; os paralelos são repetidos 10 vezes.
 
 Referência medida com `N = 512` e `tol = 1e-6`: 760 604 iterações, soma de T = 41874765.40..., cerca de 5,5 min por repetição no mesmo i7-1355U.
 

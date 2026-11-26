@@ -1,0 +1,26 @@
+=== Ambiente ===
+Data      : 2026-11-25 14:57:48
+Job       : 47421
+Nó        : atlantica01
+CPU       : Intel(R) Xeon(R) CPU           E5520  @ 2.27GHz
+Compilador: g++ (Ubuntu 9.4.0-1ubuntu1~20.04.1) 9.4.0
+Commit    : 515901b
+Parâmetros: N=1024 tol=1e-6 repetições=1
+
+=== Compilação ===
+g++ -O3 -march=native -std=c++17 -Wall -Wextra -o /tmp/tmp.PfQTkMGyM2/heat main.cpp vtkWriter.cpp
+
+=== Repetição 1 de 1 ===
+N               : 1024
+Tolerância      : 1e-06
+Iterações       : 2449575
+Resíduo final   : 9.9999944946e-07
+Soma de T       : 167156330.0959675014
+Convergiu       : sim
+Tempo init  (s) : 0.107379
+Tempo laço  (s) : 16515.466083
+Tempo saída (s) : 0.002844
+Tempo total (s) : 16515.576306
+Fração fora do laço: 0.000007
+RESULTADO rep=1 N=1024 tol=1e-06 iteracoes=2449575 soma=167156330.0959675014 convergiu=sim laco_s=16515.466083 total_s=16515.576306 fracao_seq=0.000007
+
