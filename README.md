@@ -180,7 +180,7 @@ Se um job for cancelado por tempo, as repetições que terminaram ficam na saíd
 sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 3 8
 ```
 
-**Rede:** os nós do Atlântica têm 4 placas de 1 Gb/s (`eno1` a `eno4`), sem InfiniBand, e o Open MPI usa todas por padrão. No primeiro teste com P = 32 (job 47521), a troca de bordas de um processo levou cerca de 1,3 ms por iteração, o tempo de duas mensagens de 8 KB a 100 Mb/s. O `rede.sbatch` roda 20 000 iterações com P = 32 usando todas as placas e cada uma sozinha, e mostra o tempo por iteração de cada opção:
+**Rede:** os nós do Atlântica têm 4 placas de 1 Gb/s (`eno1` a `eno4`), sem InfiniBand, e o Open MPI usa todas por padrão. No primeiro teste com P = 32 (job 47521), a troca de bordas de um processo levou cerca de 1,3 ms por iteração, o tempo de duas mensagens de 8 KB a 100 Mb/s. O `rede.sbatch` mede a troca entre os nós de duas formas, com todas as placas e com cada uma sozinha: um ping-pong (`pingpong.cpp`) entre dois processos em nós diferentes, que dá a latência e a velocidade para mensagens de 8 B a 4 MB (8 KB é o tamanho de uma linha de borda com N = 1024), e 20 000 iterações do solver com P = 32, que dão o tempo por iteração. O ping-pong também roda dentro de um nó, como referência:
 
 ```bash
 sbatch rede.sbatch
