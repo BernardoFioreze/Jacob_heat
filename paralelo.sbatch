@@ -29,6 +29,8 @@
 #   MPI_SRC   fontes da versão MPI (padrão: "heat_mpi.cpp vtkWriter.cpp")
 #   MPICXX    compilador MPI (padrão: mpicxx)
 #   LAUNCHER  srun (padrão), mpirun, ou um comando completo
+#   BTL_IF    placa de rede que o Open MPI usa entre os nós (ex.: BTL_IF=eno1);
+#             vazio usa todas. Descubra a melhor com: sbatch rede.sbatch
 #
 # A saída vai para saidas/<nome>-<jobid>.out.
 
@@ -41,6 +43,10 @@ MPI_SRC=${MPI_SRC:-heat_mpi.cpp vtkWriter.cpp}
 MPICXX=${MPICXX:-mpicxx}
 CXXFLAGS=${CXXFLAGS:--O3 -march=native -std=c++17 -Wall -Wextra}
 LAUNCHER=${LAUNCHER:-srun}
+BTL_IF=${BTL_IF:-}
+if [ -n "$BTL_IF" ]; then
+    export OMPI_MCA_btl_tcp_if_include="$BTL_IF"
+fi
 
 # Iterações e soma de T do T1 no Atlântica (job 47421), para conferir a equivalência.
 REF_ITER=""
@@ -72,6 +78,7 @@ echo "CPU       : $(lscpu | sed -n 's/^Model name:[[:space:]]*//p;s/^Nome do mod
 echo "Núcleos   : $CORES físicos por nó, $PER_NODE processos por nó, ligação por $BIND"
 echo "Compilador: $($MPICXX --version | head -1)"
 echo "MPI       : $(mpirun --version 2>/dev/null | head -1 || echo '?')"
+echo "Rede MPI  : ${BTL_IF:-todas as placas}"
 if git rev-parse --short HEAD >/dev/null 2>&1; then
     echo "Commit    : $(git rev-parse --short HEAD)"
 fi

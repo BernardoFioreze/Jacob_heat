@@ -180,7 +180,15 @@ Se um job for cancelado por tempo, as repetições que terminaram ficam na saíd
 sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 3 8
 ```
 
-Variáveis opcionais: `MPI_SRC` (fontes, padrão `heat_mpi.cpp vtkWriter.cpp`), `MPICXX` e `LAUNCHER`. Se o MPI do Atlântica não funcionar com `srun`, use `LAUNCHER=mpirun`:
+**Rede:** os nós do Atlântica têm 4 placas de 1 Gb/s (`eno1` a `eno4`), sem InfiniBand, e o Open MPI usa todas por padrão. No primeiro teste com P = 32 (job 47521), a troca de bordas de um processo levou cerca de 1,3 ms por iteração, o tempo de duas mensagens de 8 KB a 100 Mb/s. O `rede.sbatch` roda 20 000 iterações com P = 32 usando todas as placas e cada uma sozinha, e mostra o tempo por iteração de cada opção:
+
+```bash
+sbatch rede.sbatch
+```
+
+A placa mais rápida vai na variável `BTL_IF` do `paralelo.sbatch` (por exemplo, `BTL_IF=eno1 sbatch ...`).
+
+Variáveis opcionais: `MPI_SRC` (fontes, padrão `heat_mpi.cpp vtkWriter.cpp`), `MPICXX`, `LAUNCHER` e `BTL_IF`. Se o MPI do Atlântica não funcionar com `srun`, use `LAUNCHER=mpirun`:
 
 ```bash
 LAUNCHER=mpirun sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 5 1
