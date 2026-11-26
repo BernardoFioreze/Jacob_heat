@@ -26,7 +26,7 @@
 # as que faltaram se um job for cancelado por tempo.
 #
 # Variáveis de ambiente opcionais:
-#   MPI_SRC   fontes da versão MPI (padrão: heat_mpi.cpp; vários arquivos separados por espaço)
+#   MPI_SRC   fontes da versão MPI (padrão: "heat_mpi.cpp vtkWriter.cpp")
 #   MPICXX    compilador MPI (padrão: mpicxx)
 #   LAUNCHER  srun (padrão), mpirun, ou um comando completo
 #
@@ -37,15 +37,17 @@ REPS=${2:-10}
 FIRST=${3:-1}
 N=${4:-1024}
 TOL=${5:-1e-6}
-MPI_SRC=${MPI_SRC:-heat_mpi.cpp}
+MPI_SRC=${MPI_SRC:-heat_mpi.cpp vtkWriter.cpp}
 MPICXX=${MPICXX:-mpicxx}
 CXXFLAGS=${CXXFLAGS:--O3 -march=native -std=c++17 -Wall -Wextra}
 LAUNCHER=${LAUNCHER:-srun}
 
-# Número de iterações do T1 no Atlântica (job 47421), para conferir a equivalência.
+# Iterações e soma de T do T1 no Atlântica (job 47421), para conferir a equivalência.
 REF_ITER=""
+REF_SOMA=""
 if [ "$N" = 1024 ] && [ "$TOL" = 1e-6 ]; then
     REF_ITER=2449575
+    REF_SOMA=167156330.0959675014
 fi
 
 set -euo pipefail
@@ -151,8 +153,9 @@ for rep in $(seq "$FIRST" "$LAST"); do
     echo "$OUT"
 
     # Uma linha por repetição, fácil de filtrar com: grep RESULTADO saidas/*.out
-    # Se o programa MPI imprimir os tempos de cada fase, acrescente os campos aqui.
-    echo "$OUT" | awk -v rep="$rep" -v p="$P" -v ref="$REF_ITER" -F' : |: ' '
+    # equivalente: mesmo número de iterações do T1; soma_igual: mesma soma de T, dígito por dígito.
+    # Fases: média entre os processos (calc, verif, troca) e espera estimada pelo mais lento.
+    echo "$OUT" | awk -v rep="$rep" -v p="$P" -v ref="$REF_ITER" -v refsoma="$REF_SOMA" -F' : |: ' '
         /^N /                  { n = $2 }
         /^Tolerância/          { tol = $2 }
         /^Iterações/           { it = $2 }
@@ -161,10 +164,16 @@ for rep in $(seq "$FIRST" "$LAST"); do
         /^Tempo laço/          { laco = $2 }
         /^Tempo total/         { total = $2 }
         /^Fração fora do laço/ { frac = $2 }
+        /^Cálculo/             { split($2, v, " "); calc = v[2] }
+        /^Verificação/         { split($2, v, " "); verif = v[2] }
+        /^Troca/               { split($2, v, " "); troca = v[2] }
+        /^Espera verif/        { espv = $2 }
+        /^Espera troca/        { espt = $2 }
         END {
-            eq = (ref == "") ? "?" : ((it == ref) ? "sim" : "NAO")
-            printf "RESULTADO P=%s rep=%s N=%s tol=%s iteracoes=%s soma=%s convergiu=%s equivalente=%s laco_s=%s total_s=%s fracao_seq=%s\n",
-                   p, rep, n, tol, it, soma, conv, eq, laco, total, frac
+            eq = (ref == "")     ? "?" : ((it == ref)       ? "sim" : "NAO")
+            sq = (refsoma == "") ? "?" : (((soma "") == (refsoma "")) ? "sim" : "NAO")
+            printf "RESULTADO P=%s rep=%s N=%s tol=%s iteracoes=%s soma=%s convergiu=%s equivalente=%s soma_igual=%s laco_s=%s total_s=%s fracao_seq=%s calc_s=%s verif_s=%s troca_s=%s espera_verif_s=%s espera_troca_s=%s\n",
+                   p, rep, n, tol, it, soma, conv, eq, sq, laco, total, frac, calc, verif, troca, espv, espt
         }'
     echo
 done

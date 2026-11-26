@@ -1,6 +1,6 @@
-# Condução de calor 2D em placa composta (Jacobi, sequencial)
+# Condução de calor 2D em placa composta (Jacobi, sequencial e MPI)
 
-Programa em C++ que resolve a equação de condução de calor 2D em regime permanente numa placa formada por quatro materiais, cada um com uma condutividade térmica diferente. Usa diferenças finitas e o método iterativo de Jacobi.
+Programa em C++ que resolve a equação de condução de calor 2D em regime permanente numa placa formada por quatro materiais, cada um com uma condutividade térmica diferente. Usa diferenças finitas e o método iterativo de Jacobi. Há uma versão sequencial (`main.cpp`) e uma paralela com MPI no modelo de fases paralelas (`heat_mpi.cpp`).
 
 Baseado em [thermeng/2D-Heat-Conduction-Solver-for-CompositePlate](https://github.com/thermeng/2D-Heat-Conduction-Solver-for-CompositePlate), com a versão sequencial reescrita para ficar mais rápida (ver [Otimizações](#otimizações)).
 
@@ -53,6 +53,43 @@ O número de iterações e a **soma de T** resumem o resultado. Os tempos vêm s
 
 O número de iterações do Jacobi cresce com N²: cerca de 1,6 mil para N = 16, 66 mil para N = 128 e 228 mil para N = 256.
 
+## Versão paralela (MPI)
+
+```bash
+make heat_mpi
+```
+
+```bash
+mpirun -np 4 ./heat_mpi [N] [tol] [maxIter] [--vtk] [--print]
+```
+
+Os argumentos são os mesmos da versão sequencial, com `N` maior ou igual ao número de processos.
+
+**Divisão dos dados:** cada processo fica com um bloco de linhas consecutivas da grade (N/P linhas; quando a divisão não é exata, os primeiros processos ficam com uma a mais), mais uma linha fantasma em cima e outra embaixo. O primeiro processo guarda a borda superior (Dirichlet) e o último, a inferior.
+
+**As três fases**, repetidas a cada iteração por todos os processos:
+
+1. **Cálculo:** condições de contorno das bordas esquerda e direita e varredura de Jacobi no próprio bloco, com as mesmas contas da versão sequencial.
+2. **Verificação:** cada processo soma `|T_novo − T_antigo|` no seu bloco, e um único `MPI_Allreduce` (soma) entrega o total a todos. Como todos recebem o mesmo valor, todos decidem parar na mesma iteração.
+3. **Troca:** cada processo manda a primeira linha do bloco ao vizinho de cima e a última ao de baixo, com dois `MPI_Sendrecv`. Elas viram as linhas fantasma do vizinho na próxima iteração. Nas pontas, o vizinho é `MPI_PROC_NULL`, e a borda Dirichlet fica como está. Na última iteração a troca não é feita.
+
+No fim, o campo é juntado no processo 0 (`MPI_Gatherv`), que calcula a soma de T na mesma ordem da versão sequencial e grava o VTK se pedido.
+
+**Equivalência:** o Jacobi não depende da ordem em que as células são atualizadas, e cada célula é calculada com os mesmos valores e as mesmas operações da versão sequencial. Por isso o campo final é idêntico bit a bit. Conferido com N = 16, 64, 100 e 255 e com 1, 2, 3, 4 e 7 processos: o mesmo número de iterações, o mesmo resíduo final e a mesma soma de T em todos os dígitos impressos, e o VTK idêntico byte a byte.
+
+**Tempos das fases:** além das linhas da versão sequencial, o processo 0 imprime o tempo de cada fase (mínimo, média e máximo entre os processos) e uma estimativa da espera pelo processo mais lento:
+
+```
+Fases (s), entre os processos: mín méd máx
+Cálculo     (s) : ...
+Verificação (s) : ...
+Troca       (s) : ...
+Espera verif.   (s) : ...
+Espera troca    (s) : ...
+```
+
+O processo que chega por último a uma comunicação quase não espera. Então o mínimo entre os processos estima o custo da comunicação em si, e a média menos o mínimo estima quanto cada processo ficou, em média, esperando o mais lento.
+
 ## Rodando no Atlântica (Slurm)
 
 Da raiz do repositório:
@@ -91,7 +128,9 @@ Cada repetição termina com uma linha `RESULTADO ...` (iterações, soma de T, 
 grep RESULTADO saidas/*.out
 ```
 
-**Por que `N = 1024` e `tol = 1e-6`:** com 64 processos, cada um fica com 16 linhas. Assim o cálculo de cada iteração pesa mais que a comunicação (`MPI_Allreduce` e troca de bordas), e o speed-up fica mais perto do ideal do que com `N = 512`. Com essa tolerância, a temperatura média para a cerca de 0,45 °C da solução exata. **Referência do T1 no Atlântica** (job 47421, Xeon E5520, saída em [`saidas/heat-seq-47421.out`](saidas/heat-seq-47421.out)):
+**Por que `N = 1024` e `tol = 1e-6`:** com 64 processos, cada um fica com 16 linhas. Assim o cálculo de cada iteração pesa mais que a comunicação (`MPI_Allreduce` e troca de bordas), e o speed-up fica mais perto do ideal do que com `N = 512`. Com essa tolerância, a temperatura média para a cerca de 0,45 °C da solução exata.
+
+**Referência do T1 no Atlântica** (job 47421, Xeon E5520, saída em [`saidas/heat-seq-47421.out`](saidas/heat-seq-47421.out)):
 
 | Iterações | Soma de T | Tempo do laço | Fração fora do laço |
 |---|---|---|---|
@@ -105,13 +144,13 @@ Se o Atlântica exigir uma partição ou um módulo de compilador, ajuste as lin
 
 ### Versão paralela (MPI)
 
-O `paralelo.sbatch` compila a versão MPI (por padrão `heat_mpi.cpp`, com `mpicxx`) e roda P processos várias vezes:
+O `paralelo.sbatch` compila a versão MPI (`heat_mpi.cpp`, com `mpicxx`) e roda P processos várias vezes:
 
 ```bash
 sbatch -J <nome> --nodes=<nós> --ntasks-per-node=<P/nós> --time=<limite> paralelo.sbatch P [repetições] [primeira] [N] [tol]
 ```
 
-O padrão é 10 repetições, começando na 1, com `N = 1024` e `tol = 1e-6`. O programa MPI precisa aceitar `N` e `tol` como os dois primeiros argumentos e imprimir as mesmas linhas da versão sequencial (`Iterações`, `Soma de T`, `Tempo laço`...), só no processo 0.
+O padrão é 10 repetições, começando na 1, com `N = 1024` e `tol = 1e-6`.
 
 Os 8 jobs das 10 repetições, respeitando os nós do enunciado e os limites do cluster:
 
@@ -133,7 +172,7 @@ O script:
 - usa um processo por núcleo físico, e só usa HT quando há mais processos que núcleos (P = 64);
 - alterna os processos entre os dois soquetes de cada nó, para usar os dois controladores de memória;
 - compila numa pasta `build/<jobid>` dentro do repositório, visível em todos os nós, e apaga essa pasta no fim;
-- imprime uma linha `RESULTADO P=... rep=...` por repetição, com `equivalente=sim` quando o número de iterações bate com o do T1.
+- imprime uma linha `RESULTADO P=... rep=...` por repetição, com `equivalente=sim` quando o número de iterações bate com o do T1, `soma_igual=sim` quando a soma de T bate em todos os dígitos, e os tempos médios das fases (`calc_s`, `verif_s`, `troca_s`) e das esperas (`espera_verif_s`, `espera_troca_s`).
 
 Se um job for cancelado por tempo, as repetições que terminaram ficam na saída. Para completar as que faltaram, use o 3º argumento. Por exemplo, se o job de P = 32 parou depois da 7ª:
 
@@ -141,7 +180,7 @@ Se um job for cancelado por tempo, as repetições que terminaram ficam na saíd
 sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 3 8
 ```
 
-Variáveis opcionais: `MPI_SRC` (outro nome de arquivo, ou vários separados por espaço), `MPICXX` e `LAUNCHER`. Se o MPI do Atlântica não funcionar com `srun`, use `LAUNCHER=mpirun`:
+Variáveis opcionais: `MPI_SRC` (fontes, padrão `heat_mpi.cpp vtkWriter.cpp`), `MPICXX` e `LAUNCHER`. Se o MPI do Atlântica não funcionar com `srun`, use `LAUNCHER=mpirun`:
 
 ```bash
 LAUNCHER=mpirun sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 5 1
