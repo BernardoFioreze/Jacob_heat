@@ -103,6 +103,50 @@ Referência medida com `N = 512` e `tol = 1e-6`: 760 604 iterações, soma de T 
 
 Se o Atlântica exigir uma partição ou um módulo de compilador, ajuste as linhas comentadas `--partition` e `module load` no início do script.
 
+### Versão paralela (MPI)
+
+O `paralelo.sbatch` compila a versão MPI (por padrão `heat_mpi.cpp`, com `mpicxx`) e roda P processos várias vezes:
+
+```bash
+sbatch -J <nome> --nodes=<nós> --ntasks-per-node=<P/nós> --time=<limite> paralelo.sbatch P [repetições] [primeira] [N] [tol]
+```
+
+O padrão é 10 repetições, começando na 1, com `N = 1024` e `tol = 1e-6`. O programa MPI precisa aceitar `N` e `tol` como os dois primeiros argumentos e imprimir as mesmas linhas da versão sequencial (`Iterações`, `Soma de T`, `Tempo laço`...), só no processo 0.
+
+Os 8 jobs das 10 repetições, respeitando os nós do enunciado e os limites do cluster:
+
+| P | Nós | Repetições | Comando |
+|---|---|---|---|
+| 2 | 1 | 1 a 5 | `sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 5 1` |
+| 2 | 1 | 6 a 10 | `sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 5 6` |
+| 4 | 1 | 1 a 5 | `sbatch -J heat-p4 --nodes=1 --ntasks-per-node=4 --time=16:00:00 paralelo.sbatch 4 5 1` |
+| 4 | 1 | 6 a 10 | `sbatch -J heat-p4 --nodes=1 --ntasks-per-node=4 --time=16:00:00 paralelo.sbatch 4 5 6` |
+| 8 | 1 | 1 a 10 | `sbatch -J heat-p8 --nodes=1 --ntasks-per-node=8 --time=16:00:00 paralelo.sbatch 8` |
+| 16 | 2 | 1 a 10 | `sbatch -J heat-p16 --nodes=2 --ntasks-per-node=8 --time=08:00:00 paralelo.sbatch 16` |
+| 32 | 4 | 1 a 10 | `sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32` |
+| 64 | 4 | 1 a 10 | `sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64` |
+
+Como só cabem 2 jobs na fila, comece pelos de P = 2, que são os mais longos (cerca de 2 h 20 por repetição no caso ideal).
+
+O script:
+- confere se o job tem P tarefas e avisa se o número de nós não for o do enunciado;
+- usa um processo por núcleo físico, e só usa HT quando há mais processos que núcleos (P = 64);
+- alterna os processos entre os dois soquetes de cada nó, para usar os dois controladores de memória;
+- compila numa pasta `build/<jobid>` dentro do repositório, visível em todos os nós, e apaga essa pasta no fim;
+- imprime uma linha `RESULTADO P=... rep=...` por repetição, com `equivalente=sim` quando o número de iterações bate com o do T1.
+
+Se um job for cancelado por tempo, as repetições que terminaram ficam na saída. Para completar as que faltaram, use o 3º argumento. Por exemplo, se o job de P = 32 parou depois da 7ª:
+
+```bash
+sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 3 8
+```
+
+Variáveis opcionais: `MPI_SRC` (outro nome de arquivo, ou vários separados por espaço), `MPICXX` e `LAUNCHER`. Se o MPI do Atlântica não funcionar com `srun`, use `LAUNCHER=mpirun`:
+
+```bash
+LAUNCHER=mpirun sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 5 1
+```
+
 ## Otimizações
 
 Comparadas com o código original:
