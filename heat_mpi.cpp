@@ -7,7 +7,8 @@
 //   2. Verificação: MPI_Allreduce da soma de |novo - antigo|; todos recebem o mesmo total
 //      e decidem juntos se param.
 //   3. Troca: cada processo manda a primeira e a última linha do bloco aos vizinhos de cima
-//      e de baixo (MPI_Sendrecv), que as guardam nas linhas fantasma para a próxima iteração.
+//      e de baixo (MPI_Isend/MPI_Irecv nas duas direções ao mesmo tempo, depois MPI_Waitall),
+//      que as guardam nas linhas fantasma para a próxima iteração.
 //
 // Cada célula é calculada com os mesmos valores e na mesma ordem de operações da versão
 // sequencial, então o campo final é idêntico bit a bit, e o número de iterações também.
@@ -234,15 +235,18 @@ private:
 
     // A primeira linha do bloco vai para o vizinho de cima, que a guarda na sua linha
     // fantasma de baixo; a última vai para o de baixo, que a guarda na fantasma de cima.
-    // Nas pontas, MPI_PROC_NULL faz a chamada não enviar nem receber nada, e as linhas
+    // As quatro operações (duas recepções e dois envios) começam juntas e só então o
+    // processo espera todas terminarem: as mensagens das duas direções viajam ao mesmo
+    // tempo, e a troca custa cerca de uma latência de rede, não duas.
+    // Nas pontas, MPI_PROC_NULL faz a operação não enviar nem receber nada, e as linhas
     // Dirichlet ficam como estão.
     void exchangeHalos(double* t) {
-        MPI_Sendrecv(t + idx(1, 1),     N, MPI_DOUBLE, up,   0,
-                     t + idx(L + 1, 1), N, MPI_DOUBLE, down, 0,
-                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        MPI_Sendrecv(t + idx(L, 1),     N, MPI_DOUBLE, down, 1,
-                     t + idx(0, 1),     N, MPI_DOUBLE, up,   1,
-                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Request req[4];
+        MPI_Irecv(t + idx(0, 1),     N, MPI_DOUBLE, up,   1, MPI_COMM_WORLD, &req[0]);  // última linha do de cima
+        MPI_Irecv(t + idx(L + 1, 1), N, MPI_DOUBLE, down, 0, MPI_COMM_WORLD, &req[1]);  // primeira do de baixo
+        MPI_Isend(t + idx(1, 1),     N, MPI_DOUBLE, up,   0, MPI_COMM_WORLD, &req[2]);  // minha primeira, para cima
+        MPI_Isend(t + idx(L, 1),     N, MPI_DOUBLE, down, 1, MPI_COMM_WORLD, &req[3]);  // minha última, para baixo
+        MPI_Waitall(4, req, MPI_STATUSES_IGNORE);
     }
 };
 

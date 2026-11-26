@@ -71,7 +71,7 @@ Os argumentos são os mesmos da versão sequencial, com `N` maior ou igual ao n�
 
 1. **Cálculo:** condições de contorno das bordas esquerda e direita e varredura de Jacobi no próprio bloco, com as mesmas contas da versão sequencial.
 2. **Verificação:** cada processo soma `|T_novo − T_antigo|` no seu bloco, e um único `MPI_Allreduce` (soma) entrega o total a todos. Como todos recebem o mesmo valor, todos decidem parar na mesma iteração.
-3. **Troca:** cada processo manda a primeira linha do bloco ao vizinho de cima e a última ao de baixo, com dois `MPI_Sendrecv`. Elas viram as linhas fantasma do vizinho na próxima iteração. Nas pontas, o vizinho é `MPI_PROC_NULL`, e a borda Dirichlet fica como está. Na última iteração a troca não é feita.
+3. **Troca:** cada processo manda a primeira linha do bloco ao vizinho de cima e a última ao de baixo. As duas recepções e os dois envios (`MPI_Irecv` e `MPI_Isend`) começam juntos, e um `MPI_Waitall` espera todos, então as mensagens das duas direções viajam ao mesmo tempo. Elas viram as linhas fantasma do vizinho na próxima iteração. Nas pontas, o vizinho é `MPI_PROC_NULL`, e a borda Dirichlet fica como está. Na última iteração a troca não é feita.
 
 No fim, o campo é juntado no processo 0 (`MPI_Gatherv`), que calcula a soma de T na mesma ordem da versão sequencial e grava o VTK se pedido.
 
@@ -152,7 +152,7 @@ sbatch -J <nome> --nodes=<nós> --ntasks-per-node=<P/nós> --time=<limite> paral
 
 O padrão é 10 repetições, começando na 1, com `N = 1024` e `tol = 1e-6`.
 
-Os 8 jobs das 10 repetições, respeitando os nós do enunciado e os limites do cluster:
+Os 10 jobs das 10 repetições, respeitando os nós do enunciado e os limites do cluster:
 
 | P | Nós | Repetições | Comando |
 |---|---|---|---|
@@ -162,8 +162,10 @@ Os 8 jobs das 10 repetições, respeitando os nós do enunciado e os limites do 
 | 4 | 1 | 6 a 10 | `sbatch -J heat-p4 --nodes=1 --ntasks-per-node=4 --time=16:00:00 paralelo.sbatch 4 5 6` |
 | 8 | 1 | 1 a 10 | `sbatch -J heat-p8 --nodes=1 --ntasks-per-node=8 --time=16:00:00 paralelo.sbatch 8` |
 | 16 | 2 | 1 a 10 | `sbatch -J heat-p16 --nodes=2 --ntasks-per-node=8 --time=08:00:00 paralelo.sbatch 16` |
-| 32 | 4 | 1 a 10 | `sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32` |
-| 64 | 4 | 1 a 10 | `sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64` |
+| 32 | 4 | 1 a 5 | `sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 5 1` |
+| 32 | 4 | 6 a 10 | `sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 5 6` |
+| 64 | 4 | 1 a 5 | `sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 5 1` |
+| 64 | 4 | 6 a 10 | `sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 5 6` |
 
 Como só cabem 2 jobs na fila, comece pelos de P = 2, que são os mais longos (cerca de 2 h 20 por repetição no caso ideal).
 
@@ -186,7 +188,20 @@ sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch
 sbatch rede.sbatch
 ```
 
-A placa mais rápida vai na variável `BTL_IF` do `paralelo.sbatch` (por exemplo, `BTL_IF=eno1 sbatch ...`).
+Resultado do primeiro teste (P = 32, troca com dois `MPI_Sendrecv` em sequência):
+
+| Placa | Ping-pong 8 KB (ida) | Ping-pong 4 MB | Solver, por iteração |
+|---|---|---|---|
+| mesmo nó (memória) | 6 µs | 24,8 Gb/s | — |
+| todas (padrão do Open MPI) | 199 µs | 3,2 Gb/s | 1488 µs |
+| eno1 | 197 µs | 934 Mb/s | 673 µs |
+| eno2 | não terminou | — | 1881 µs |
+| eno3 | não terminou | — | 680 µs |
+| eno4 | 142 µs | 936 Mb/s | 1876 µs |
+
+Cada placa chega a 1 Gb/s, mas uma linha de 8 KB leva de 140 a 200 µs entre nós (66 µs de transmissão e o resto de latência do TCP), 30 vezes mais que dentro de um nó. Com todas as placas, o Open MPI divide cada mensagem entre elas, e as placas lentas em algum par de nós atrasam todo mundo. Por isso o `paralelo.sbatch` usa `BTL_IF=eno1` por padrão; `BTL_IF= sbatch ...` (vazio) volta a usar todas.
+
+Depois desse teste, a troca passou a usar `MPI_Isend`/`MPI_Irecv` nas duas direções ao mesmo tempo, com um só `MPI_Waitall`, para as mensagens para cima e para baixo viajarem juntas.
 
 Variáveis opcionais: `MPI_SRC` (fontes, padrão `heat_mpi.cpp vtkWriter.cpp`), `MPICXX`, `LAUNCHER` e `BTL_IF`. Se o MPI do Atlântica não funcionar com `srun`, use `LAUNCHER=mpirun`:
 

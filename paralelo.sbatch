@@ -18,8 +18,10 @@
 #   sbatch -J heat-p4  --nodes=1 --ntasks-per-node=4  --time=16:00:00 paralelo.sbatch 4 5 6
 #   sbatch -J heat-p8  --nodes=1 --ntasks-per-node=8  --time=16:00:00 paralelo.sbatch 8
 #   sbatch -J heat-p16 --nodes=2 --ntasks-per-node=8  --time=08:00:00 paralelo.sbatch 16
-#   sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8  --time=04:00:00 paralelo.sbatch 32
-#   sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64
+#   sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8  --time=04:00:00 paralelo.sbatch 32 5 1
+#   sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8  --time=04:00:00 paralelo.sbatch 32 5 6
+#   sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 5 1
+#   sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 5 6
 #
 # "primeira" é o número da primeira repetição do job. Serve para dividir as 10
 # repetições em mais de um job (1 a 5 num, 6 a 10 no outro) ou para completar
@@ -29,8 +31,8 @@
 #   MPI_SRC   fontes da versão MPI (padrão: "heat_mpi.cpp vtkWriter.cpp")
 #   MPICXX    compilador MPI (padrão: mpicxx)
 #   LAUNCHER  srun (padrão), mpirun, ou um comando completo
-#   BTL_IF    placa de rede que o Open MPI usa entre os nós (ex.: BTL_IF=eno1);
-#             vazio usa todas. Descubra a melhor com: sbatch rede.sbatch
+#   BTL_IF    placa de rede que o Open MPI usa entre os nós (padrão: eno1, a mais
+#             rápida no rede.sbatch); BTL_IF= (vazio) usa todas, o padrão do Open MPI
 #
 # A saída vai para saidas/<nome>-<jobid>.out.
 
@@ -43,7 +45,7 @@ MPI_SRC=${MPI_SRC:-heat_mpi.cpp vtkWriter.cpp}
 MPICXX=${MPICXX:-mpicxx}
 CXXFLAGS=${CXXFLAGS:--O3 -march=native -std=c++17 -Wall -Wextra}
 LAUNCHER=${LAUNCHER:-srun}
-BTL_IF=${BTL_IF:-}
+BTL_IF=${BTL_IF-eno1}
 if [ -n "$BTL_IF" ]; then
     export OMPI_MCA_btl_tcp_if_include="$BTL_IF"
 fi
