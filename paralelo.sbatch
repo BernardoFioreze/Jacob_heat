@@ -9,22 +9,31 @@
 # Uso (a partir da raiz do repositório):
 #   sbatch -J <nome> --nodes=<nós> --ntasks-per-node=<P/nós> --time=<limite> \
 #          paralelo.sbatch P [repetições] [primeira] [N] [tol]
-# Padrão: 10 repetições, começando na 1, N=1024, tol=1e-6.
+# Padrão: 8 repetições, começando na 1, N=1024, tol=1e-6.
 #
-# Nós, tarefas e tempo vão na linha de comando, porque mudam com P:
-#   sbatch -J heat-p2  --nodes=1 --ntasks-per-node=2  --time=16:00:00 paralelo.sbatch 2 5 1
-#   sbatch -J heat-p2  --nodes=1 --ntasks-per-node=2  --time=16:00:00 paralelo.sbatch 2 5 6
-#   sbatch -J heat-p4  --nodes=1 --ntasks-per-node=4  --time=16:00:00 paralelo.sbatch 4 5 1
-#   sbatch -J heat-p4  --nodes=1 --ntasks-per-node=4  --time=16:00:00 paralelo.sbatch 4 5 6
-#   sbatch -J heat-p8  --nodes=1 --ntasks-per-node=8  --time=16:00:00 paralelo.sbatch 8
-#   sbatch -J heat-p16 --nodes=2 --ntasks-per-node=8  --time=08:00:00 paralelo.sbatch 16
-#   sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8  --time=04:00:00 paralelo.sbatch 32 5 1
-#   sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8  --time=04:00:00 paralelo.sbatch 32 5 6
-#   sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 5 1
-#   sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 5 6
+# Nós, tarefas e tempo vão na linha de comando, porque mudam com P. Os 12 jobs das
+# 8 repetições por P, na ordem sugerida (rodadas de 2 jobs; tempos do escala.sbatch):
+#   rodada 1 (dia):
+#     sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 4 1   # 1 h 45
+#     sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 4 1   # 1 h 55
+#   rodada 2 (dia):
+#     sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 4 5   # 1 h 45
+#     sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 4 5   # 1 h 55
+#   rodada 3 (dia):
+#     sbatch -J heat-p16 --nodes=2 --ntasks-per-node=8 --time=08:00:00 paralelo.sbatch 16 4 1   # 6 h 00
+#     sbatch -J heat-p16 --nodes=2 --ntasks-per-node=8 --time=08:00:00 paralelo.sbatch 16 4 5   # 6 h 00
+#   rodada 4 (noite):
+#     sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 4 1   # 11 h 15
+#     sbatch -J heat-p4 --nodes=1 --ntasks-per-node=4 --time=16:00:00 paralelo.sbatch 4 4 1   # 11 h 30
+#   rodada 5 (dia):
+#     sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 4 5   # 11 h 15
+#     sbatch -J heat-p4 --nodes=1 --ntasks-per-node=4 --time=16:00:00 paralelo.sbatch 4 4 5   # 11 h 30
+#   rodada 6 (noite):
+#     sbatch -J heat-p8 --nodes=1 --ntasks-per-node=8 --time=16:00:00 paralelo.sbatch 8 4 1   # 12 h 05
+#     sbatch -J heat-p8 --nodes=1 --ntasks-per-node=8 --time=16:00:00 paralelo.sbatch 8 4 5   # 12 h 05
 #
-# "primeira" é o número da primeira repetição do job. Serve para dividir as 10
-# repetições em mais de um job (1 a 5 num, 6 a 10 no outro) ou para completar
+# "primeira" é o número da primeira repetição do job. Serve para dividir as 8
+# repetições em mais de um job (1 a 4 num, 5 a 8 no outro) ou para completar
 # as que faltaram se um job for cancelado por tempo.
 #
 # Variáveis de ambiente opcionais:
@@ -37,7 +46,7 @@
 # A saída vai para saidas/<nome>-<jobid>.out.
 
 P=${1:?informe P (número de processos)}
-REPS=${2:-10}
+REPS=${2:-8}
 FIRST=${3:-1}
 N=${4:-1024}
 TOL=${5:-1e-6}

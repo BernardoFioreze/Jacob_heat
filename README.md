@@ -136,7 +136,7 @@ grep RESULTADO saidas/*.out
 |---|---|---|---|
 | 2 449 575 | 167156330.0959675014 | 16 515 s (4 h 35 min) | 0,000007 |
 
-A versão paralela tem de dar exatamente o mesmo número de iterações. A soma de T pode diferir nos últimos dígitos, porque a redução soma em outra ordem. O T1 foi medido uma vez só, por causa do tempo; os paralelos são repetidos 10 vezes.
+A versão paralela tem de dar exatamente o mesmo número de iterações. A soma de T pode diferir nos últimos dígitos, porque a redução soma em outra ordem. O T1 foi medido uma vez só, por causa do tempo; os paralelos são repetidos 8 vezes.
 
 Referência medida com `N = 512` e `tol = 1e-6`: 760 604 iterações, soma de T = 41874765.40..., cerca de 5,5 min por repetição no mesmo i7-1355U.
 
@@ -150,24 +150,28 @@ O `paralelo.sbatch` compila a versão MPI (`heat_mpi.cpp`, com `mpicxx`) e roda 
 sbatch -J <nome> --nodes=<nós> --ntasks-per-node=<P/nós> --time=<limite> paralelo.sbatch P [repetições] [primeira] [N] [tol]
 ```
 
-O padrão é 10 repetições, começando na 1, com `N = 1024` e `tol = 1e-6`.
+O padrão é 8 repetições, começando na 1, com `N = 1024` e `tol = 1e-6`.
 
-Os 10 jobs das 10 repetições, respeitando os nós do enunciado e os limites do cluster:
+Os 12 jobs das 8 repetições de cada P (2 jobs de 4 repetições por P), na ordem sugerida. Os tempos são estimativas do `escala.sbatch` (job de 20 000 iterações), e cada job pede o tempo máximo permitido para o número de nós dele. Como só cabem 2 jobs na fila, cada rodada são 2 jobs ao mesmo tempo: os curtos (2 a 6 h) de dia e os longos (11 a 12 h) à noite.
 
-| P | Nós | Repetições | Comando |
-|---|---|---|---|
-| 2 | 1 | 1 a 5 | `sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 5 1` |
-| 2 | 1 | 6 a 10 | `sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 5 6` |
-| 4 | 1 | 1 a 5 | `sbatch -J heat-p4 --nodes=1 --ntasks-per-node=4 --time=16:00:00 paralelo.sbatch 4 5 1` |
-| 4 | 1 | 6 a 10 | `sbatch -J heat-p4 --nodes=1 --ntasks-per-node=4 --time=16:00:00 paralelo.sbatch 4 5 6` |
-| 8 | 1 | 1 a 10 | `sbatch -J heat-p8 --nodes=1 --ntasks-per-node=8 --time=16:00:00 paralelo.sbatch 8` |
-| 16 | 2 | 1 a 10 | `sbatch -J heat-p16 --nodes=2 --ntasks-per-node=8 --time=08:00:00 paralelo.sbatch 16` |
-| 32 | 4 | 1 a 5 | `sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 5 1` |
-| 32 | 4 | 6 a 10 | `sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 5 6` |
-| 64 | 4 | 1 a 5 | `sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 5 1` |
-| 64 | 4 | 6 a 10 | `sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 5 6` |
+| Rodada | Quando | P | Repetições | Tempo estimado | Comando |
+|---|---|---|---|---|---|
+| 1 | dia | 32 | 1 a 4 | 1 h 45 | `sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 4 1` |
+|  |  | 64 | 1 a 4 | 1 h 55 | `sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 4 1` |
+| 2 | dia | 32 | 5 a 8 | 1 h 45 | `sbatch -J heat-p32 --nodes=4 --ntasks-per-node=8 --time=04:00:00 paralelo.sbatch 32 4 5` |
+|  |  | 64 | 5 a 8 | 1 h 55 | `sbatch -J heat-p64 --nodes=4 --ntasks-per-node=16 --ntasks-per-core=2 --time=04:00:00 paralelo.sbatch 64 4 5` |
+| 3 | dia | 16 | 1 a 4 | 6 h 00 | `sbatch -J heat-p16 --nodes=2 --ntasks-per-node=8 --time=08:00:00 paralelo.sbatch 16 4 1` |
+|  |  | 16 | 5 a 8 | 6 h 00 | `sbatch -J heat-p16 --nodes=2 --ntasks-per-node=8 --time=08:00:00 paralelo.sbatch 16 4 5` |
+| 4 | noite | 2 | 1 a 4 | 11 h 15 | `sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 4 1` |
+|  |  | 4 | 1 a 4 | 11 h 30 | `sbatch -J heat-p4 --nodes=1 --ntasks-per-node=4 --time=16:00:00 paralelo.sbatch 4 4 1` |
+| 5 | dia | 2 | 5 a 8 | 11 h 15 | `sbatch -J heat-p2 --nodes=1 --ntasks-per-node=2 --time=16:00:00 paralelo.sbatch 2 4 5` |
+|  |  | 4 | 5 a 8 | 11 h 30 | `sbatch -J heat-p4 --nodes=1 --ntasks-per-node=4 --time=16:00:00 paralelo.sbatch 4 4 5` |
+| 6 | noite | 8 | 1 a 4 | 12 h 05 | `sbatch -J heat-p8 --nodes=1 --ntasks-per-node=8 --time=16:00:00 paralelo.sbatch 8 4 1` |
+|  |  | 8 | 5 a 8 | 12 h 05 | `sbatch -J heat-p8 --nodes=1 --ntasks-per-node=8 --time=16:00:00 paralelo.sbatch 8 4 5` |
 
-Como só cabem 2 jobs na fila, comece pelos de P = 2, que são os mais longos (cerca de 2 h 20 por repetição no caso ideal).
+São cerca de 89 horas de job, em uns 2 dias se a fila estiver livre: no 1º dia, as rodadas 1 a 3 e a 4 à noite; no 2º, a 5 de dia (de manhã até a noite) e a 6 à noite. Se um job da rodada acabar antes do outro, já dá para submeter o próximo da lista. Dois jobs de 4 nós ao mesmo tempo (rodadas 1 e 2) precisam de 8 nós livres; se não houver, o segundo espera na fila.
+
+Depois do primeiro job, confira se a linha `RESULTADO` tem `equivalente=sim` e `soma_igual=sim` antes de seguir.
 
 O script:
 - confere se o job tem P tarefas e avisa se o número de nós não for o do enunciado;
